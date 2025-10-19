@@ -3,8 +3,8 @@ from discord.ext import commands
 import yt_dlp
 import os
 
-
-DISCORD_TOKEN = os.environ['discordkey']
+# --- Load Discord token from environment ---
+DISCORD_TOKEN = os.environ.get("discordkey")
 
 # --- Bot Setup ---
 intents = discord.Intents.default()
@@ -13,10 +13,27 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # --- Helper function to get YouTube audio URL ---
 def get_youtube_audio_url(url):
-    ydl_opts = {'format': 'bestaudio', 'quiet': True}
+    """
+    Extracts the best audio stream URL using yt-dlp.
+    Uses a cookies file if available (for YouTube authentication).
+    """
+
+    # ✅ Check both possible cookie locations:
+    cookie_path = None
+    if os.path.exists("/etc/secrets/cookies.txt"):
+        cookie_path = "/etc/secrets/cookies.txt"  # Render secret file
+    elif os.path.exists("cookies.txt"):
+        cookie_path = "cookies.txt"  # Local testing
+
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "quiet": True,
+        "cookiefile": cookie_path,
+    }
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
-        return info['url']
+        return info["url"]
 
 # --- Commands ---
 
@@ -59,8 +76,13 @@ async def play(ctx, url):
     if vc.is_playing():
         vc.stop()
 
-    audio_url = get_youtube_audio_url(url)
-    ffmpeg_opts = {'options': '-vn'}
+    try:
+        audio_url = get_youtube_audio_url(url)
+    except Exception as e:
+        await ctx.send(f"⚠️ Could not load that video: {e}")
+        return
+
+    ffmpeg_opts = {"options": "-vn"}
     source = await discord.FFmpegOpusAudio.from_probe(audio_url, **ffmpeg_opts)
     vc.play(source, after=lambda e: print(f"Error: {e}") if e else None)
     await ctx.send(f"🎵 Now playing: {url}")
@@ -93,5 +115,4 @@ async def resume(ctx):
         await ctx.send("No music is paused!")
 
 # --- Run the bot ---
-
 bot.run(DISCORD_TOKEN)
