@@ -93,4 +93,5 @@ async def resume(ctx):
         await ctx.send("No music is paused!")
 
 # --- Run the bot ---
-bot.run("DISCORD_TOKEN")
+
+bot.run(DISCORD_TOKEN)
