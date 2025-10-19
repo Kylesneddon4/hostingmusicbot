@@ -11,6 +11,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+
 # --- Helper function to get YouTube audio URL ---
 def get_youtube_audio_url(url):
     """
@@ -18,28 +19,43 @@ def get_youtube_audio_url(url):
     Uses a cookies file if available (for YouTube authentication).
     """
 
-    # ✅ Check both possible cookie locations:
+    # ✅ Check both possible cookie locations
     cookie_path = None
     if os.path.exists("/etc/secrets/cookies.txt"):
-        cookie_path = "/etc/secrets/cookies.txt"  # Render secret file
+        cookie_path = "/etc/secrets/cookies.txt"
+        print("✅ Using Render cookies.txt for authentication")
     elif os.path.exists("cookies.txt"):
-        cookie_path = "cookies.txt"  # Local testing
+        cookie_path = "cookies.txt"
+        print("✅ Using local cookies.txt for authentication")
+    else:
+        print("⚠️ No cookies.txt found — may hit YouTube rate limits or login errors")
 
+    # yt-dlp options (tuned for server use)
     ydl_opts = {
         "format": "bestaudio/best",
         "quiet": True,
         "cookiefile": cookie_path,
+        "noplaylist": True,
+        "retries": 5,
+        "extract_flat": False,
+        "geo_bypass": True,
+        "source_address": "0.0.0.0",  # helps avoid some regional throttles
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        return info["url"]
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return info["url"]
+    except Exception as e:
+        print(f"❌ yt_dlp error: {e}")
+        raise
+
 
 # --- Commands ---
-
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
+
 
 @bot.command()
 async def join(ctx):
@@ -54,6 +70,7 @@ async def join(ctx):
     else:
         await ctx.send("You are not in a voice channel!")
 
+
 @bot.command()
 async def leave(ctx):
     if ctx.voice_client:
@@ -62,6 +79,7 @@ async def leave(ctx):
         await ctx.send("Left the voice channel.")
     else:
         await ctx.send("I'm not in a voice channel!")
+
 
 @bot.command()
 async def play(ctx, url):
@@ -83,9 +101,15 @@ async def play(ctx, url):
         return
 
     ffmpeg_opts = {"options": "-vn"}
-    source = await discord.FFmpegOpusAudio.from_probe(audio_url, **ffmpeg_opts)
+    try:
+        source = await discord.FFmpegOpusAudio.from_probe(audio_url, **ffmpeg_opts)
+    except Exception as e:
+        await ctx.send(f"⚠️ Could not create audio stream: {e}")
+        return
+
     vc.play(source, after=lambda e: print(f"Error: {e}") if e else None)
     await ctx.send(f"🎵 Now playing: {url}")
+
 
 @bot.command()
 async def stop(ctx):
@@ -96,6 +120,7 @@ async def stop(ctx):
     else:
         await ctx.send("No music is playing!")
 
+
 @bot.command()
 async def pause(ctx):
     vc = ctx.voice_client
@@ -105,6 +130,7 @@ async def pause(ctx):
     else:
         await ctx.send("No music is playing!")
 
+
 @bot.command()
 async def resume(ctx):
     vc = ctx.voice_client
@@ -113,6 +139,7 @@ async def resume(ctx):
         await ctx.send("▶️ Resumed playback.")
     else:
         await ctx.send("No music is paused!")
+
 
 # --- Run the bot ---
 bot.run(DISCORD_TOKEN)
